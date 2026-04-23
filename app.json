@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "HealthMaxx",
-    "slug": "HealthMaxx",
+    "slug": "healthmaxx",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.ellisnjie.healthmaxx",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -43,6 +47,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a3379f21-3cd9-45a4-babf-f644bcd49af5"
+      }
+    },
+    "owner": "smoko"
   }
 }
