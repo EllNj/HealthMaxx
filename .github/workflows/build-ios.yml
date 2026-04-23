@@ -27,6 +27,15 @@ jobs:
       - name: Expo prebuild
         run: npx expo prebuild --platform ios --clean
 
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/.cocoapods
+          key: pods-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-
+
       - name: Install CocoaPods
         run: |
           cd ios
