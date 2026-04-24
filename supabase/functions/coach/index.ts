@@ -17,25 +17,19 @@ serve(async (req) => {
     const apiKey = Deno.env.get('GEMINI_API_KEY');
     if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
 
-    // Auth: get user from JWT
     const authHeader = req.headers.get('authorization') ?? '';
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Verify the user's JWT and get user_id
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { authorization: authHeader } },
-    });
-    const { data: { user }, error: authErr } = await userClient.auth.getUser();
+    // Verify JWT using service-role client with the raw token
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const db = createClient(supabaseUrl, serviceKey);
+    const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) throw new Error('Unauthorised');
 
     const body = await req.json() as { messages: Message[] };
     const messages = body.messages ?? [];
     if (messages.length === 0) throw new Error('No messages provided');
-
-    // Use service role to query user data
-    const db = createClient(supabaseUrl, serviceKey);
     const userId = user.id;
 
     // ── Build context ──────────────────────────────────────────────
