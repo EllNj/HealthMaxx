@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
+
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Colors } from '@/constants/theme';
@@ -174,6 +175,13 @@ function SetRow({
   const repsColor = isLogged ? textColor : repsTouched ? textColor : muted;
   const weightColor = isLogged ? textColor : weightTouched ? textColor : muted;
 
+  const overloadDiff = useMemo(() => {
+    if (!isLogged || !prefill || logged.weight_kg == null || prefill.weight_kg == null) return null;
+    const diff = Math.round((logged.weight_kg - prefill.weight_kg) * 10) / 10;
+    if (Math.abs(diff) < 0.05) return null;
+    return diff;
+  }, [isLogged, logged, prefill]);
+
   const onTick = async () => {
     if (isLogged) return;
     const r = parseInt(repsTouched ? reps : prefilledReps, 10);
@@ -232,7 +240,14 @@ function SetRow({
           borderBottomColor: border,
         },
       ]}>
-      <Text style={[setStyles.numCell, { color: muted }]}>{setNum}</Text>
+      <View style={setStyles.numCell}>
+        <Text style={{ color: muted, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>{setNum}</Text>
+        {overloadDiff !== null && (
+          <Text style={{ fontSize: 9, fontWeight: '700', textAlign: 'center', color: overloadDiff > 0 ? '#22c55e' : '#ef4444' }}>
+            {overloadDiff > 0 ? '▲' : '▼'}
+          </Text>
+        )}
+      </View>
       <TextInput
         style={[
           setStyles.input,
@@ -340,7 +355,7 @@ const setStyles = StyleSheet.create({
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  numCell: { width: 36, textAlign: 'center', fontSize: 14, fontWeight: '600' },
+  numCell: { width: 36, alignItems: 'center', justifyContent: 'center' },
   input: {
     flex: 1,
     textAlign: 'center',

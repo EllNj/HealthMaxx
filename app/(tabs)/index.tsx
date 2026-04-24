@@ -1,11 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
@@ -15,6 +17,11 @@ import Svg, { Circle } from 'react-native-svg';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/src/features/auth/useAuth';
 import { useTodayEntries, useDayTotals } from '@/src/features/food/useFoodEntries';
+import {
+  useBodyWeightLogs,
+  useLogBodyWeight,
+  useDeleteBodyWeightLog,
+} from '@/src/features/profile/useBodyWeight';
 import { useSessionHistory, useWeeklyVolume } from '@/src/features/workouts/useSessions';
 import { supabase } from '@/src/lib/supabase';
 
@@ -40,6 +47,12 @@ export default function DashboardScreen() {
   const totals = useDayTotals(foodEntries);
   const { data: history } = useSessionHistory(userId, 1);
   const { data: weeklyVolume } = useWeeklyVolume(userId);
+  const { data: weightLogs } = useBodyWeightLogs(userId, 7);
+  const logWeight = useLogBodyWeight();
+  const deleteWeight = useDeleteBodyWeightLog();
+
+  const [addingWeight, setAddingWeight] = useState(false);
+  const [weightInput, setWeightInput] = useState('');
 
   const lastSession = history?.[0] ?? null;
 
@@ -64,6 +77,57 @@ export default function DashboardScreen() {
     () => Math.max(...(weeklyVolume ?? []).map((d) => d.volume), 1),
     [weeklyVolume]
   );
+
+  // Build a 7-slot weight chart aligned to today
+  const weightChart = useMemo(() => {
+    const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const slots = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${day}`;
+      const log = weightLogs?.find((l) => l.logged_date === dateStr) ?? null;
+      slots.push({ dateStr, label: i === 0 ? 'Today' : DAY_LABELS[d.getDay()], log });
+    }
+    return slots;
+  }, [weightLogs]);
+
+  const todayWeightLog = weightChart[6]?.log ?? null;
+  const allWeights = weightChart.map((s) => s.log?.weight_kg ?? 0).filter(Boolean) as number[];
+  const minW = allWeights.length > 0 ? Math.min(...allWeights) : 0;
+  const maxW = allWeights.length > 0 ? Math.max(...allWeights) : 1;
+  const weightRange = Math.max(maxW - minW, 0.5);
+
+  const onSaveWeight = async () => {
+    const val = parseFloat(weightInput);
+    if (!Number.isFinite(val) || val <= 0) {
+      Alert.alert('Invalid weight', 'Enter a valid weight in kg.');
+      return;
+    }
+    if (!userId) return;
+    try {
+      await logWeight.mutateAsync({ userId, weight_kg: val });
+      setWeightInput('');
+      setAddingWeight(false);
+    } catch (e: any) {
+      Alert.alert('Could not save', e.message ?? String(e));
+    }
+  };
+
+  const onDeleteWeight = (id: string) => {
+    if (!userId) return;
+    Alert.alert('Delete weight log?', 'Remove this entry?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteWeight.mutate({ id, userId }),
+      },
+    ]);
+  };
 
   return (
     <ScrollView
@@ -90,7 +154,6 @@ export default function DashboardScreen() {
           {/* Calorie ring */}
           <View style={styles.ringWrap}>
             <Svg width={RING_SIZE} height={RING_SIZE}>
-              {/* Track */}
               <Circle
                 cx={RING_SIZE / 2}
                 cy={RING_SIZE / 2}
@@ -99,7 +162,6 @@ export default function DashboardScreen() {
                 strokeWidth={RING_STROKE}
                 fill="none"
               />
-              {/* Progress */}
               <Circle
                 cx={RING_SIZE / 2}
                 cy={RING_SIZE / 2}
@@ -139,6 +201,107 @@ export default function DashboardScreen() {
               <Text style={[styles.logFoodBtnText, { color: onTint }]}>Log food</Text>
             </Pressable>
           </View>
+        </View>
+      </View>
+
+      {/* Body weight */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionHeader, { color: muted }]}>Body Weight</Text>
+        <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
+          {/* Today's weight + delete */}
+          <View style={styles.weightTopRow}>
+            <View>
+              <Text style={[styles.weightValue, { color: c.text }]}>
+                {todayWeightLog ? `${todayWeightLog.weight_kg} kg` : '— kg'}
+              </Text>
+              {(() => {
+                const prev = weightChart.slice(0, 6).reverse().find((s) => s.log != null)?.log;
+                if (!todayWeightLog || !prev) return null;
+                const diff = Math.round((todayWeightLog.weight_kg - prev.weight_kg) * 10) / 10;
+                if (diff === 0) return null;
+                return (
+                  <Text style={{ fontSize: 12, color: diff < 0 ? '#22c55e' : '#ef4444', marginTop: 2 }}>
+                    {diff > 0 ? '+' : ''}{diff} kg vs prev
+                  </Text>
+                );
+              })()}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {todayWeightLog && (
+                <Pressable
+                  onPress={() => onDeleteWeight(todayWeightLog.id)}
+                  hitSlop={8}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                  <Ionicons name="trash-outline" size={18} color={muted} />
+                </Pressable>
+              )}
+              <Pressable
+                onPress={() => {
+                  setWeightInput(todayWeightLog ? String(todayWeightLog.weight_kg) : '');
+                  setAddingWeight((v) => !v);
+                }}
+                hitSlop={8}
+                style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+                <Ionicons name={addingWeight ? 'close' : (todayWeightLog ? 'pencil' : 'add')} size={20} color={c.tint} />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Inline log input */}
+          {addingWeight && (
+            <View style={styles.weightInputRow}>
+              <TextInput
+                style={[styles.weightInput, { borderColor: border, color: c.text }]}
+                placeholder="Weight in kg"
+                placeholderTextColor={muted}
+                keyboardType="decimal-pad"
+                value={weightInput}
+                onChangeText={setWeightInput}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={onSaveWeight}
+              />
+              <Pressable
+                onPress={onSaveWeight}
+                disabled={logWeight.isPending}
+                style={({ pressed }) => [
+                  styles.weightSaveBtn,
+                  { backgroundColor: c.tint, opacity: pressed || logWeight.isPending ? 0.7 : 1 },
+                ]}>
+                <Text style={[styles.weightSaveBtnText, { color: onTint }]}>Save</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* 7-day trend bars */}
+          {allWeights.length > 1 && (
+            <View style={[styles.weightChart, { borderTopColor: border }]}>
+              {weightChart.map((slot, i) => {
+                const h = slot.log ? Math.max(((slot.log.weight_kg - minW) / weightRange) * 48 + 8, 8) : 0;
+                const isToday = i === 6;
+                return (
+                  <View key={i} style={styles.weightBarCol}>
+                    <View style={styles.weightBarOuter}>
+                      {slot.log && (
+                        <View
+                          style={[
+                            styles.weightBarInner,
+                            {
+                              height: h,
+                              backgroundColor: isToday ? c.tint : scheme === 'dark' ? '#3a3d42' : '#d0d4d8',
+                            },
+                          ]}
+                        />
+                      )}
+                    </View>
+                    <Text style={[styles.weightBarLabel, { color: isToday ? c.tint : muted }]}>
+                      {slot.label.slice(0, 3)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
       </View>
 
@@ -297,10 +460,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   ringWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  ringCenter: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
+  ringCenter: { position: 'absolute', alignItems: 'center' },
   ringCalories: { fontSize: 22, fontWeight: '700' },
   ringLabel: { fontSize: 11, marginTop: -2 },
   ringRemaining: { fontSize: 10, marginTop: 2 },
@@ -328,34 +488,40 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 3 },
   cardMeta: { fontSize: 12 },
-  emptyCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-  },
+  emptyCard: { borderWidth: 1, borderRadius: 12, padding: 16 },
   emptyText: { fontSize: 14, lineHeight: 20 },
-  barChart: {
+  // Body weight
+  weightTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  weightValue: { fontSize: 24, fontWeight: '700' },
+  weightInputRow: { flexDirection: 'row', gap: 8, marginTop: 12, alignItems: 'center' },
+  weightInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  weightSaveBtn: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10 },
+  weightSaveBtnText: { fontSize: 14, fontWeight: '700' },
+  weightChart: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: 104,
+    height: 72,
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
     gap: 4,
   },
-  barCol: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    height: 104,
-  },
-  barOuter: {
-    width: '100%',
-    height: 80,
-    justifyContent: 'flex-end',
-  },
-  barInner: {
-    width: '100%',
-    borderRadius: 3,
-    minHeight: 0,
-  },
+  weightBarCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 72 },
+  weightBarOuter: { width: '100%', height: 56, justifyContent: 'flex-end' },
+  weightBarInner: { width: '100%', borderRadius: 3 },
+  weightBarLabel: { fontSize: 9, fontWeight: '600', marginTop: 4 },
+  // Weekly volume
+  barChart: { flexDirection: 'row', alignItems: 'flex-end', height: 104, gap: 4 },
+  barCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 104 },
+  barOuter: { width: '100%', height: 80, justifyContent: 'flex-end' },
+  barInner: { width: '100%', borderRadius: 3, minHeight: 0 },
   barLabel: { fontSize: 9, fontWeight: '600', marginTop: 4 },
   healthIcon: {
     width: 40,

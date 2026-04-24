@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -38,7 +38,7 @@ export default function WorkoutsScreen() {
   const createTemplate = useCreateTemplate();
   const { data: active } = useActiveSession(session?.user.id);
   const startSession = useStartSessionFromTemplate();
-  const { data: history } = useSessionHistory(session?.user.id, 10);
+  const { data: history } = useSessionHistory(session?.user.id, 60);
 
   const onNewTemplate = async () => {
     if (!session?.user.id) return;
@@ -184,7 +184,18 @@ export default function WorkoutsScreen() {
       {history && history.length > 0 && (
         <View style={[styles.section, { marginTop: 32 }]}>
           <Text style={[styles.sectionHeader, { color: muted, marginBottom: 10 }]}>History</Text>
-          {history.map((s) => (
+
+          {/* 28-day workout calendar */}
+          <WorkoutCalendar
+            history={history}
+            scheme={scheme}
+            border={border}
+            muted={muted}
+            cardBg={cardBg}
+            tint={c.tint}
+          />
+
+          {history.slice(0, 10).map((s) => (
             <HistoryCard
               key={s.id}
               item={s}
@@ -225,6 +236,109 @@ export default function WorkoutsScreen() {
     </View>
   );
 }
+
+function WorkoutCalendar({
+  history,
+  scheme,
+  border,
+  muted,
+  cardBg,
+  tint,
+}: {
+  history: SessionSummary[];
+  scheme: 'light' | 'dark';
+  border: string;
+  muted: string;
+  cardBg: string;
+  tint: string;
+}) {
+  const calendarDays = useMemo(() => {
+    const sessionDateSet = new Set(
+      history.map((s) => {
+        const d = new Date(s.started_at);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      })
+    );
+
+    const days = [];
+    // Align start to the Monday of 4 weeks ago
+    const today = new Date();
+    const todayDay = today.getDay(); // 0=Sun
+    // Start on Monday 27 days before (so we get 4 full Mon-Sun rows ending this Sun or later)
+    const startOffset = ((todayDay === 0 ? 7 : todayDay) - 1) + 21; // Mon 4 weeks ago
+    const start = new Date(today);
+    start.setDate(today.getDate() - startOffset);
+
+    for (let i = 0; i < 28; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const y = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${mm}-${dd}`;
+      const isToday = dateStr === (() => {
+        const t = new Date();
+        return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+      })();
+      days.push({ dateStr, dayNum: d.getDate(), hasSession: sessionDateSet.has(dateStr), isToday });
+    }
+    return days;
+  }, [history]);
+
+  return (
+    <View style={[calStyles.grid, { backgroundColor: cardBg, borderColor: border }]}>
+      {/* Day-of-week headers */}
+      {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+        <Text key={i} style={[calStyles.dayHeader, { color: muted }]}>{d}</Text>
+      ))}
+      {/* Calendar cells */}
+      {calendarDays.map((day, i) => (
+        <View
+          key={i}
+          style={[
+            calStyles.cell,
+            day.isToday && { borderWidth: 1, borderColor: tint, borderRadius: 6 },
+          ]}>
+          <Text style={[calStyles.dayNum, { color: day.isToday ? tint : muted }]}>
+            {day.dayNum}
+          </Text>
+          {day.hasSession && (
+            <View style={[calStyles.dot, { backgroundColor: tint }]} />
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const calStyles = StyleSheet.create({
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 16,
+  },
+  dayHeader: {
+    width: '14.28%',
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    paddingBottom: 6,
+  },
+  cell: {
+    width: '14.28%',
+    alignItems: 'center',
+    paddingVertical: 5,
+  },
+  dayNum: { fontSize: 12, fontWeight: '500' },
+  dot: { width: 5, height: 5, borderRadius: 3, marginTop: 2 },
+});
 
 function HistoryCard({
   item,

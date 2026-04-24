@@ -14,6 +14,10 @@ export type FoodEntry = {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g: number | null;
+  sugar_g: number | null;
+  saturated_fat_g: number | null;
+  sodium_mg: number | null;
   gemini_raw: unknown;
   created_at: string;
 };
@@ -23,6 +27,10 @@ export type DayTotals = {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g: number;
+  sugar_g: number;
+  saturated_fat_g: number;
+  sodium_mg: number;
 };
 
 function localDateString(date = new Date()): string {
@@ -73,6 +81,10 @@ export function useLogFood() {
           protein_g: Math.round(input.parsed.total.protein_g * 10) / 10,
           carbs_g: Math.round(input.parsed.total.carbs_g * 10) / 10,
           fat_g: Math.round(input.parsed.total.fat_g * 10) / 10,
+          fiber_g: input.parsed.total.fiber_g != null ? Math.round(input.parsed.total.fiber_g * 10) / 10 : null,
+          sugar_g: input.parsed.total.sugar_g != null ? Math.round(input.parsed.total.sugar_g * 10) / 10 : null,
+          saturated_fat_g: input.parsed.total.saturated_fat_g != null ? Math.round(input.parsed.total.saturated_fat_g * 10) / 10 : null,
+          sodium_mg: input.parsed.total.sodium_mg != null ? Math.round(input.parsed.total.sodium_mg) : null,
           gemini_raw: input.parsed._gemini_raw ?? null,
         })
         .select()
@@ -83,6 +95,7 @@ export function useLogFood() {
     onSuccess: (_d, v) => {
       const today = localDateString();
       qc.invalidateQueries({ queryKey: ['food_entries', v.userId, today] });
+      qc.invalidateQueries({ queryKey: ['weekly_nutrition', v.userId] });
     },
   });
 }
@@ -97,19 +110,24 @@ export function useDeleteFoodEntry() {
     onSuccess: (_d, v) => {
       const today = localDateString();
       qc.invalidateQueries({ queryKey: ['food_entries', v.userId, today] });
+      qc.invalidateQueries({ queryKey: ['weekly_nutrition', v.userId] });
     },
   });
 }
 
 export function useDayTotals(entries: FoodEntry[] | undefined): DayTotals {
-  if (!entries) return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+  if (!entries) return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, saturated_fat_g: 0, sodium_mg: 0 };
   return entries.reduce(
     (acc, e) => ({
       calories: acc.calories + e.calories,
       protein_g: acc.protein_g + e.protein_g,
       carbs_g: acc.carbs_g + e.carbs_g,
       fat_g: acc.fat_g + e.fat_g,
+      fiber_g: acc.fiber_g + (e.fiber_g ?? 0),
+      sugar_g: acc.sugar_g + (e.sugar_g ?? 0),
+      saturated_fat_g: acc.saturated_fat_g + (e.saturated_fat_g ?? 0),
+      sodium_mg: acc.sodium_mg + (e.sodium_mg ?? 0),
     }),
-    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+    { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, saturated_fat_g: 0, sodium_mg: 0 }
   );
 }

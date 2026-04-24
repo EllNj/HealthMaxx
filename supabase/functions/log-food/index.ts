@@ -30,11 +30,11 @@ serve(async (req) => {
       });
     }
 
-    const jsonSchema = `{"items":[{"name":"string","qty":"string","calories":0,"protein_g":0,"carbs_g":0,"fat_g":0}],"total":{"calories":0,"protein_g":0,"carbs_g":0,"fat_g":0},"confidence":0.9,"notes":"string"}`;
+    const jsonSchema = `{"items":[{"name":"string","qty":"string","calories":0,"protein_g":0,"carbs_g":0,"fat_g":0,"fiber_g":0,"sugar_g":0,"saturated_fat_g":0,"sodium_mg":0}],"total":{"calories":0,"protein_g":0,"carbs_g":0,"fat_g":0,"fiber_g":0,"sugar_g":0,"saturated_fat_g":0,"sodium_mg":0},"confidence":0.9,"notes":"string"}`;
 
     const prompt = `You are a precise nutrition assistant. Analyse the food described or shown and return ONLY a valid JSON object (no markdown, no extra text) matching this shape:
 ${jsonSchema}
-Rules: all macros in grams, calories as kcal integers, confidence 0.0–1.0. Assume a typical single serving if portions are unclear.`;
+Rules: all macros in grams, calories as kcal integers, confidence 0.0–1.0. Include fiber_g, sugar_g, saturated_fat_g, sodium_mg where known (use null if genuinely unknown). Assume a typical single serving if portions are unclear.`;
 
     const searchInstruction = useWebSearch
       ? ' Use Google Search to look up accurate nutrition data for any branded, packaged, or restaurant items before answering.'
@@ -81,13 +81,13 @@ Rules: all macros in grams, calories as kcal integers, confidence 0.0–1.0. Ass
 
     // Strip markdown fences (anywhere in response)
     rawText = rawText.replace(/```json?\s*/gi, '').replace(/```/g, '').trim();
-    // Extract the outermost JSON object (greedy match from first { to last })
+    // Extract the outermost JSON object
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
     if (jsonMatch) rawText = jsonMatch[0].trim();
 
     let parsed: {
-      items: { name: string; qty: string; calories: number; protein_g: number; carbs_g: number; fat_g: number }[];
-      total: { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+      items: { name: string; qty: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number | null; sugar_g?: number | null; saturated_fat_g?: number | null; sodium_mg?: number | null }[];
+      total: { calories: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number | null; sugar_g?: number | null; saturated_fat_g?: number | null; sodium_mg?: number | null };
       confidence: number;
       notes: string;
     };
@@ -105,8 +105,12 @@ Rules: all macros in grams, calories as kcal integers, confidence 0.0–1.0. Ass
           protein_g: acc.protein_g + (item.protein_g ?? 0),
           carbs_g: acc.carbs_g + (item.carbs_g ?? 0),
           fat_g: acc.fat_g + (item.fat_g ?? 0),
+          fiber_g: (acc.fiber_g ?? 0) + (item.fiber_g ?? 0),
+          sugar_g: (acc.sugar_g ?? 0) + (item.sugar_g ?? 0),
+          saturated_fat_g: (acc.saturated_fat_g ?? 0) + (item.saturated_fat_g ?? 0),
+          sodium_mg: (acc.sodium_mg ?? 0) + (item.sodium_mg ?? 0),
         }),
-        { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 }
+        { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0, fiber_g: 0, sugar_g: 0, saturated_fat_g: 0, sodium_mg: 0 }
       );
     }
 

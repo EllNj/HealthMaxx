@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/theme';
 import { useAuth } from '@/src/features/auth/useAuth';
 import { useLogFood } from '@/src/features/food/useFoodEntries';
+import { useSaveMeal } from '@/src/features/food/useSavedMeals';
 import { logFood, type ParsedMeal } from '@/src/lib/gemini';
 
 type InputMode = 'text' | 'photo' | 'barcode';
@@ -68,6 +69,7 @@ export default function CaptureScreen() {
 
   const { session } = useAuth();
   const logFoodMutation = useLogFood();
+  const saveMealMutation = useSaveMeal();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   const [mode, setMode] = useState<InputMode>('text');
@@ -85,6 +87,7 @@ export default function CaptureScreen() {
   const [editPro, setEditPro] = useState('');
   const [editCarbs, setEditCarbs] = useState('');
   const [editFat, setEditFat] = useState('');
+  const [saveAsMeal, setSaveAsMeal] = useState(false);
 
   const textRef = useRef<TextInput>(null);
 
@@ -203,14 +206,38 @@ export default function CaptureScreen() {
       return;
     }
     setPhase('saving');
+    const finalParsed: ParsedMeal = {
+      ...parsed,
+      total: {
+        ...parsed.total,
+        calories: cal,
+        protein_g: pro,
+        carbs_g: carbs,
+        fat_g: fat,
+      },
+    };
     try {
       await logFoodMutation.mutateAsync({
         userId: session.user.id,
         description: editName.trim() || 'Food entry',
         inputType: mode === 'barcode' ? 'text' : mode,
         imagePath: null,
-        parsed: { ...parsed, total: { calories: cal, protein_g: pro, carbs_g: carbs, fat_g: fat } },
+        parsed: finalParsed,
       });
+      if (saveAsMeal) {
+        await saveMealMutation.mutateAsync({
+          user_id: session.user.id,
+          name: editName.trim() || 'Saved meal',
+          calories: cal,
+          protein_g: pro,
+          carbs_g: carbs,
+          fat_g: fat,
+          fiber_g: finalParsed.total.fiber_g ?? null,
+          sugar_g: finalParsed.total.sugar_g ?? null,
+          saturated_fat_g: finalParsed.total.saturated_fat_g ?? null,
+          sodium_mg: finalParsed.total.sodium_mg ?? null,
+        });
+      }
       router.back();
     } catch (e: any) {
       Alert.alert('Save failed', e.message ?? String(e));
@@ -438,6 +465,26 @@ export default function CaptureScreen() {
                 </View>
               </View>
 
+              {/* Micronutrients (if returned by AI) */}
+              {(() => {
+                const t = parsed.total;
+                const hasMicro = t.fiber_g != null || t.sugar_g != null || t.saturated_fat_g != null || t.sodium_mg != null;
+                if (!hasMicro) return null;
+                return (
+                  <View style={[styles.microCard, { backgroundColor: cardBg, borderColor: border }]}>
+                    <Text style={[styles.cardLabel, { color: muted }]}>Micronutrients</Text>
+                    <Text style={[styles.microText, { color: c.text }]}>
+                      {[
+                        t.fiber_g != null && `Fibre ${Math.round(t.fiber_g * 10) / 10}g`,
+                        t.sugar_g != null && `Sugar ${Math.round(t.sugar_g * 10) / 10}g`,
+                        t.saturated_fat_g != null && `Sat. fat ${Math.round(t.saturated_fat_g * 10) / 10}g`,
+                        t.sodium_mg != null && `Sodium ${Math.round(t.sodium_mg)}mg`,
+                      ].filter(Boolean).join('  ·  ')}
+                    </Text>
+                  </View>
+                );
+              })()}
+
               {parsed.notes ? (
                 <Text style={[styles.notes, { color: muted }]}>{parsed.notes}</Text>
               ) : null}
@@ -447,6 +494,20 @@ export default function CaptureScreen() {
                   {mode === 'barcode' ? 'Open Food Facts' : `AI confidence: ${Math.round(parsed.confidence * 100)}%`}
                 </Text>
               </View>
+
+              {/* Save as meal toggle */}
+              <Pressable
+                onPress={() => setSaveAsMeal((v) => !v)}
+                style={[styles.saveToggleRow, { borderColor: border, backgroundColor: cardBg }]}>
+                <Ionicons
+                  name={saveAsMeal ? 'bookmark' : 'bookmark-outline'}
+                  size={18}
+                  color={saveAsMeal ? c.tint : muted}
+                />
+                <Text style={[styles.saveToggleText, { color: saveAsMeal ? c.tint : c.text }]}>
+                  Save as quick-log meal
+                </Text>
+              </Pressable>
 
               <Pressable
                 onPress={onConfirm}
@@ -616,6 +677,19 @@ const styles = StyleSheet.create({
   notes: { fontSize: 13, marginBottom: 8, fontStyle: 'italic' },
   confidenceRow: { alignItems: 'flex-end', marginBottom: 8 },
   confidenceLabel: { fontSize: 12 },
+  microCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 12 },
+  microText: { fontSize: 14, lineHeight: 20 },
+  saveToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  saveToggleText: { fontSize: 15, fontWeight: '500' },
 });
 
 const macroStyles = StyleSheet.create({
