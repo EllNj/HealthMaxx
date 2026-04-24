@@ -18,6 +18,7 @@ import { useAuth } from '@/src/features/auth/useAuth';
 import {
   useActiveSession,
   useSessionHistory,
+  useStartEmptySession,
   useStartSessionFromTemplate,
   type SessionSummary,
 } from '@/src/features/workouts/useSessions';
@@ -38,6 +39,7 @@ export default function WorkoutsScreen() {
   const createTemplate = useCreateTemplate();
   const { data: active } = useActiveSession(session?.user.id);
   const startSession = useStartSessionFromTemplate();
+  const startEmpty = useStartEmptySession();
   const { data: history } = useSessionHistory(session?.user.id, 60);
 
   const onNewTemplate = async () => {
@@ -50,6 +52,27 @@ export default function WorkoutsScreen() {
       router.push(`/workout/template/${t.id}` as Href);
     } catch (e: any) {
       Alert.alert('Could not create template', e.message ?? String(e));
+    }
+  };
+
+  const onStartEmpty = async () => {
+    if (!session?.user.id) return;
+    if (active) {
+      Alert.alert(
+        'Session in progress',
+        `You have an active "${active.name ?? 'workout'}" session. Resume it first.`,
+        [
+          { text: 'OK', style: 'cancel' },
+          { text: 'Resume', onPress: () => router.push(`/workout/active?id=${active.id}` as Href) },
+        ]
+      );
+      return;
+    }
+    try {
+      const s = await startEmpty.mutateAsync({ user_id: session.user.id, name: 'Quick workout' });
+      router.push(`/workout/active?id=${s.id}` as Href);
+    } catch (e: any) {
+      Alert.alert('Could not start', e.message ?? String(e));
     }
   };
 
@@ -124,6 +147,18 @@ export default function WorkoutsScreen() {
             <Text style={[styles.newBtnText, { color: onTint }]}>New</Text>
           </Pressable>
         </View>
+
+        {/* Empty / quick-start workout */}
+        <Pressable
+          onPress={onStartEmpty}
+          disabled={startEmpty.isPending}
+          style={({ pressed }) => [
+            styles.emptyStartBtn,
+            { borderColor: c.tint, opacity: pressed || startEmpty.isPending ? 0.6 : 1 },
+          ]}>
+          <Ionicons name="flash" size={16} color={c.tint} />
+          <Text style={[styles.emptyStartText, { color: c.tint }]}>Start empty workout</Text>
+        </Pressable>
 
         {isLoading && (
           <View style={styles.center}>
@@ -452,6 +487,18 @@ const styles = StyleSheet.create({
   },
   linkText: { flex: 1, fontSize: 15, fontWeight: '500' },
   center: { padding: 24, alignItems: 'center' },
+  emptyStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    marginBottom: 14,
+  },
+  emptyStartText: { fontSize: 15, fontWeight: '700' },
   resumeCard: {
     flexDirection: 'row',
     alignItems: 'center',

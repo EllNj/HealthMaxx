@@ -125,6 +125,25 @@ export function useStartSessionFromTemplate() {
   });
 }
 
+export function useStartEmptySession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { user_id: string; name?: string }) => {
+      const { data, error } = await supabase
+        .from('workout_sessions')
+        .insert({ user_id: input.user_id, name: input.name ?? 'Empty workout' })
+        .select()
+        .single();
+      if (error) throw error;
+      return data as WorkoutSession;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workout_sessions'] });
+      qc.invalidateQueries({ queryKey: ['active_session'] });
+    },
+  });
+}
+
 export function useActiveSession(userId: string | undefined) {
   return useQuery({
     queryKey: ['active_session', userId],
