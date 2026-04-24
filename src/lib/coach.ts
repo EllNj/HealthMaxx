@@ -6,6 +6,8 @@ const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
 export async function askCoach(messages: ChatMessage[]): Promise<string> {
+  // getUser() validates the JWT server-side and refreshes it if stale
+  await supabase.auth.getUser();
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token ?? ANON_KEY;
 
