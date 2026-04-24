@@ -13,6 +13,7 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
@@ -135,13 +136,11 @@ export default function CoachScreen() {
               {item.role === 'assistant' && (
                 <Ionicons name="sparkles" size={13} color={c.tint} style={styles.aiIcon} />
               )}
-              <Text
-                style={[
-                  styles.bubbleText,
-                  { color: item.role === 'user' ? onTint : c.text },
-                ]}>
-                {item.content}
-              </Text>
+              {item.role === 'user' ? (
+                <Text style={[styles.bubbleText, { color: onTint }]}>{item.content}</Text>
+              ) : (
+                <Markdown style={markdownStyles(c.text)}>{item.content}</Markdown>
+              )}
             </View>
           )}
         />
@@ -188,6 +187,19 @@ export default function CoachScreen() {
     </KeyboardAvoidingView>
   );
 }
+
+const markdownStyles = (color: string) => ({
+  body: { color, fontSize: 15, lineHeight: 22 },
+  strong: { fontWeight: '700' as const },
+  bullet_list: { marginVertical: 4 },
+  ordered_list: { marginVertical: 4 },
+  list_item: { marginVertical: 2 },
+  paragraph: { marginVertical: 0 },
+  heading1: { color, fontSize: 17, fontWeight: '700' as const, marginVertical: 6 },
+  heading2: { color, fontSize: 16, fontWeight: '700' as const, marginVertical: 4 },
+  heading3: { color, fontSize: 15, fontWeight: '600' as const, marginVertical: 4 },
+  code_inline: { backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 4, paddingHorizontal: 4 },
+});
 
 const styles = StyleSheet.create({
   header: {
