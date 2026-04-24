@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -36,8 +35,6 @@ export default function CoachScreen() {
   const userBubble = c.tint;
   const aiBubble = cardBg;
   const insets = useSafeAreaInsets();
-
-  const tabBarHeight = useBottomTabBarHeight();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -82,7 +79,7 @@ export default function CoachScreen() {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: c.background }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={tabBarHeight}>
+      keyboardVerticalOffset={0}>
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: border }]}>
