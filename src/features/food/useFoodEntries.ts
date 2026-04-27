@@ -61,6 +61,26 @@ export function useTodayEntries(userId: string | undefined) {
   return useEntriesForDate(userId, localDateString());
 }
 
+export function useRecentFoodEntries(userId: string | undefined, days = 14) {
+  return useQuery({
+    queryKey: ['food_entries_recent', userId, days],
+    enabled: !!userId,
+    queryFn: async () => {
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+      const { data, error } = await supabase
+        .from('food_entries')
+        .select('description,calories,protein_g,carbs_g,fat_g,logged_for_date')
+        .eq('user_id', userId!)
+        .gte('logged_for_date', localDateString(since))
+        .order('logged_for_date', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Pick<FoodEntry, 'description' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'logged_for_date'>[];
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 export function useLogFood() {
   const qc = useQueryClient();
   return useMutation({

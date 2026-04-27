@@ -32,6 +32,7 @@ import {
 import { useSavedMeals, useDeleteSavedMeal, type SavedMeal } from '@/src/features/food/useSavedMeals';
 import { useWeeklyNutrition } from '@/src/features/food/useWeeklyNutrition';
 import { useProfile, useUpdateGoals, type NutritionGoals } from '@/src/features/profile/useProfile';
+import { MealPlannerSheet } from '@/src/features/food/MealPlannerSheet';
 
 const RING_SIZE = 160;
 const STROKE = 14;
@@ -78,6 +79,7 @@ export default function FoodScreen() {
   };
 
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const [plannerOpen, setPlannerOpen] = useState(false);
 
   const calPct = Math.min(totals.calories / goals.calories, 1);
   const strokeDashoffset = CIRCUMFERENCE * (1 - calPct);
@@ -167,6 +169,12 @@ export default function FoodScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Text style={[styles.title, { color: c.text }]}>Food</Text>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Pressable
+            onPress={() => setPlannerOpen(true)}
+            hitSlop={8}
+            style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+            <Ionicons name="restaurant-outline" size={22} color={muted} />
+          </Pressable>
           <Pressable
             onPress={() => setGoalsOpen(true)}
             hitSlop={8}
@@ -356,6 +364,14 @@ export default function FoodScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <MealPlannerSheet
+        visible={plannerOpen}
+        onClose={() => setPlannerOpen(false)}
+        userId={userId}
+        goals={{ calorie_goal: goals.calories, protein_goal_g: goals.protein_g, carbs_goal_g: goals.carbs_g, fat_goal_g: goals.fat_g }}
+        scheme={scheme}
+      />
 
       <GoalsModal
         visible={goalsOpen}
