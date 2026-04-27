@@ -16,9 +16,10 @@ type Props = {
   sets: WorkoutSet[];
   scheme: 'light' | 'dark';
   onSetLogged: (restSeconds: number, exerciseName: string) => void;
+  onRemove?: () => void;
 };
 
-export function ExerciseBlock({ block, sessionId, sets, scheme, onSetLogged }: Props) {
+export function ExerciseBlock({ block, sessionId, sets, scheme, onSetLogged, onRemove }: Props) {
   const c = Colors[scheme];
   const border = scheme === 'dark' ? '#2a2d30' : '#e3e5e8';
   const muted = scheme === 'dark' ? '#9BA1A6' : '#687076';
@@ -78,6 +79,19 @@ export function ExerciseBlock({ block, sessionId, sets, scheme, onSetLogged }: P
             </Text>
           )}
         </View>
+        {onRemove && (
+          <Pressable
+            onPress={() =>
+              Alert.alert('Remove exercise?', block.exercise.name, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: onRemove },
+              ])
+            }
+            hitSlop={8}
+            style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 4 })}>
+            <Ionicons name="trash-outline" size={18} color={muted} />
+          </Pressable>
+        )}
       </View>
 
       <View style={[styles.headerRow, { borderBottomColor: border }]}>

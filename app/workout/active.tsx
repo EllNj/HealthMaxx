@@ -78,14 +78,15 @@ export default function ActiveSessionScreen() {
   const [elapsed, setElapsed] = useState('0:00');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [adHocExercises, setAdHocExercises] = useState<Exercise[]>([]);
+  const [removedExerciseIds, setRemovedExerciseIds] = useState<Set<string>>(new Set());
   const startedAt = useRef<number | null>(null);
   const restNotifIdRef = useRef<string | null>(null);
 
   const allBlocks = useMemo<SessionExerciseBlock[]>(() => {
-    const existing = blocks ?? [];
-    const seen = new Set(existing.map((b) => b.exercise.id));
+    const existing = (blocks ?? []).filter((b) => !removedExerciseIds.has(b.exercise.id));
+    const seen = new Set((blocks ?? []).map((b) => b.exercise.id));
     const extras: SessionExerciseBlock[] = adHocExercises
-      .filter((ex) => !seen.has(ex.id))
+      .filter((ex) => !seen.has(ex.id) && !removedExerciseIds.has(ex.id))
       .map((ex, i) => ({
         exercise: ex,
         template_exercise_id: null,
@@ -95,7 +96,7 @@ export default function ActiveSessionScreen() {
         order_index: existing.length + i,
       }));
     return [...existing, ...extras];
-  }, [blocks, adHocExercises]);
+  }, [blocks, adHocExercises, removedExerciseIds]);
 
   useEffect(() => {
     if (session?.started_at) startedAt.current = new Date(session.started_at).getTime();
@@ -245,6 +246,9 @@ export default function ActiveSessionScreen() {
               sets={sets}
               scheme={scheme}
               onSetLogged={onSetLogged}
+              onRemove={() =>
+                setRemovedExerciseIds((s) => new Set([...s, block.exercise.id]))
+              }
             />
           ))}
 
