@@ -161,6 +161,29 @@ export function ExerciseBlock({ block, sessionId, sets, scheme, onSetLogged, onR
   );
 }
 
+function computePlates(displayWeight: number, unit: 'kg' | 'lbs'): string | null {
+  const barWeight = unit === 'lbs' ? 45 : 20;
+  const plates = unit === 'lbs'
+    ? [45, 35, 25, 10, 5, 2.5]
+    : [25, 20, 15, 10, 5, 2.5, 1.25];
+
+  const eachSide = (displayWeight - barWeight) / 2;
+  if (eachSide < 0.01) return null;
+
+  let remaining = eachSide;
+  const used: Array<{ weight: number; count: number }> = [];
+  for (const plate of plates) {
+    const count = Math.floor(remaining / plate + 0.001);
+    if (count > 0) {
+      used.push({ weight: plate, count });
+      remaining -= count * plate;
+      remaining = Math.round(remaining * 1000) / 1000;
+    }
+  }
+  if (remaining > 0.3 || used.length === 0) return null;
+  return `${barWeight}${unit} + ${used.map((p) => `${p.count}×${p.weight}`).join('+')} /side`;
+}
+
 type SetRowProps = {
   setNum: number;
   logged: WorkoutSet | undefined;
@@ -301,39 +324,49 @@ function SetRow({
 
   const displayReps = repsTouched ? reps : prefilledReps;
   const displayWeight = weightTouched ? weight : prefilledWeight;
+  const plateHint = useMemo(() => {
+    const w = parseFloat(displayWeight);
+    if (!Number.isFinite(w) || w <= 0) return null;
+    return computePlates(w, unit);
+  }, [displayWeight, unit]);
 
   return (
-    <View style={[setStyles.row, { backgroundColor: 'transparent', borderBottomColor: border }]}>
-      <View style={setStyles.numCell}>
-        <Text style={{ color: muted, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>{setNum}</Text>
+    <View style={[setStyles.rowOuter, { borderBottomColor: border }]}>
+      <View style={setStyles.row}>
+        <View style={setStyles.numCell}>
+          <Text style={{ color: muted, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>{setNum}</Text>
+        </View>
+        <TextInput
+          style={[setStyles.input, { color: repsColor, borderColor: border }]}
+          value={displayReps}
+          placeholder="–"
+          placeholderTextColor={muted}
+          keyboardType="number-pad"
+          selectTextOnFocus
+          onFocus={() => { if (!repsTouched) { setReps(prefilledReps); setRepsTouched(true); } }}
+          onChangeText={(t) => { setReps(t); setRepsTouched(true); }}
+        />
+        <TextInput
+          style={[setStyles.input, { color: weightColor, borderColor: border }]}
+          value={displayWeight}
+          placeholder="–"
+          placeholderTextColor={muted}
+          keyboardType="decimal-pad"
+          selectTextOnFocus
+          onFocus={() => { if (!weightTouched) { setWeight(prefilledWeight); setWeightTouched(true); } }}
+          onChangeText={(t) => { setWeight(t); setWeightTouched(true); }}
+        />
+        <Pressable
+          onPress={onTick}
+          disabled={logSet.isPending}
+          hitSlop={6}
+          style={({ pressed }) => [setStyles.check, { opacity: pressed ? 0.5 : 1 }]}>
+          <Ionicons name={editing ? 'checkmark-circle' : 'checkmark-circle-outline'} size={28} color={editing ? tint : muted} />
+        </Pressable>
       </View>
-      <TextInput
-        style={[setStyles.input, { color: repsColor, borderColor: border }]}
-        value={displayReps}
-        placeholder="–"
-        placeholderTextColor={muted}
-        keyboardType="number-pad"
-        selectTextOnFocus
-        onFocus={() => { if (!repsTouched) { setReps(prefilledReps); setRepsTouched(true); } }}
-        onChangeText={(t) => { setReps(t); setRepsTouched(true); }}
-      />
-      <TextInput
-        style={[setStyles.input, { color: weightColor, borderColor: border }]}
-        value={displayWeight}
-        placeholder="–"
-        placeholderTextColor={muted}
-        keyboardType="decimal-pad"
-        selectTextOnFocus
-        onFocus={() => { if (!weightTouched) { setWeight(prefilledWeight); setWeightTouched(true); } }}
-        onChangeText={(t) => { setWeight(t); setWeightTouched(true); }}
-      />
-      <Pressable
-        onPress={onTick}
-        disabled={logSet.isPending}
-        hitSlop={6}
-        style={({ pressed }) => [setStyles.check, { opacity: pressed ? 0.5 : 1 }]}>
-        <Ionicons name={editing ? 'checkmark-circle' : 'checkmark-circle-outline'} size={28} color={editing ? tint : muted} />
-      </Pressable>
+      {plateHint && (
+        <Text style={[setStyles.plateHint, { color: muted }]}>{plateHint}</Text>
+      )}
     </View>
   );
 }
@@ -379,11 +412,19 @@ const styles = StyleSheet.create({
 });
 
 const setStyles = StyleSheet.create({
+  rowOuter: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  plateHint: {
+    fontSize: 10,
+    textAlign: 'center',
+    paddingBottom: 4,
+    fontVariant: ['tabular-nums'],
   },
   numCell: { width: 36, alignItems: 'center', justifyContent: 'center' },
   input: {
