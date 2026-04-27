@@ -4,7 +4,9 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -409,23 +411,27 @@ function GoalsModal({ visible, current, saving, onSave, onClose, scheme }: {
 
   return (
     <Modal visible={visible} animationType="slide" transparent onShow={onShow} onRequestClose={onClose}>
-      <Pressable style={{ flex: 1 }} onPress={onClose} />
-      <View style={[goalStyles.sheet, { backgroundColor: bg, borderTopColor: border, paddingBottom: insets.bottom + 16 }]}>
-        <View style={[goalStyles.handle, { backgroundColor: muted }]} />
-        <Text style={[goalStyles.sheetTitle, { color: c.text }]}>Nutrition goals</Text>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <View style={[goalStyles.sheet, { backgroundColor: bg, borderTopColor: border, paddingBottom: insets.bottom + 16 }]}>
+          <View style={[goalStyles.handle, { backgroundColor: muted }]} />
+          <Text style={[goalStyles.sheetTitle, { color: c.text }]}>Nutrition goals</Text>
 
-        <GoalInput label="Calories" unit="kcal" value={calories} onChange={setCalories} border={border} textColor={c.text} muted={muted} />
-        <GoalInput label="Protein" unit="g" value={protein} onChange={setProtein} border={border} textColor={c.text} muted={muted} />
-        <GoalInput label="Carbs" unit="g" value={carbs} onChange={setCarbs} border={border} textColor={c.text} muted={muted} />
-        <GoalInput label="Fat" unit="g" value={fat} onChange={setFat} border={border} textColor={c.text} muted={muted} />
+          <GoalInput label="Calories" unit="kcal" value={calories} onChange={setCalories} border={border} textColor={c.text} muted={muted} />
+          <GoalInput label="Protein" unit="g" value={protein} onChange={setProtein} border={border} textColor={c.text} muted={muted} />
+          <GoalInput label="Carbs" unit="g" value={carbs} onChange={setCarbs} border={border} textColor={c.text} muted={muted} />
+          <GoalInput label="Fat" unit="g" value={fat} onChange={setFat} border={border} textColor={c.text} muted={muted} />
 
-        <Pressable
-          onPress={onSubmit}
-          disabled={saving}
-          style={({ pressed }) => [goalStyles.saveBtn, { backgroundColor: c.tint, opacity: pressed || saving ? 0.7 : 1 }]}>
-          <Text style={[goalStyles.saveBtnText, { color: onTint }]}>{saving ? 'Saving…' : 'Save goals'}</Text>
-        </Pressable>
-      </View>
+          <Pressable
+            onPress={onSubmit}
+            disabled={saving}
+            style={({ pressed }) => [goalStyles.saveBtn, { backgroundColor: c.tint, opacity: pressed || saving ? 0.7 : 1 }]}>
+            <Text style={[goalStyles.saveBtnText, { color: onTint }]}>{saving ? 'Saving…' : 'Save goals'}</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
