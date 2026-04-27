@@ -189,7 +189,7 @@ ${nutritionContext || 'No food entries yet'}`;
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents,
-        generationConfig: { temperature: 0.7, maxOutputTokens: 800 },
+        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 },
       }),
     });
 
