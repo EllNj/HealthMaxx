@@ -171,19 +171,20 @@ function SetRow({
   const [repsTouched, setRepsTouched] = useState(false);
   const [weightTouched, setWeightTouched] = useState(false);
 
-  const isLogged = !!logged;
-  const repsColor = isLogged ? textColor : repsTouched ? textColor : muted;
-  const weightColor = isLogged ? textColor : weightTouched ? textColor : muted;
+  const [editing, setEditing] = useState(false);
+  const isLogged = !!logged && !editing;
+
+  const repsColor = repsTouched ? textColor : muted;
+  const weightColor = weightTouched ? textColor : muted;
 
   const overloadDiff = useMemo(() => {
-    if (!isLogged || !prefill || logged.weight_kg == null || prefill.weight_kg == null) return null;
+    if (!logged || !prefill || logged.weight_kg == null || prefill.weight_kg == null) return null;
     const diff = Math.round((logged.weight_kg - prefill.weight_kg) * 10) / 10;
     if (Math.abs(diff) < 0.05) return null;
     return diff;
-  }, [isLogged, logged, prefill]);
+  }, [logged, prefill]);
 
   const onTick = async () => {
-    if (isLogged) return;
     const r = parseInt(repsTouched ? reps : prefilledReps, 10);
     const w = parseFloat(weightTouched ? weight : prefilledWeight);
     if (!Number.isFinite(r) || r <= 0) {
@@ -194,6 +195,10 @@ function SetRow({
       Alert.alert('Missing weight', 'Enter a weight before logging this set. Use 0 for bodyweight.');
       return;
     }
+    // If editing, delete old record first
+    if (logged && editing) {
+      await deleteSet.mutateAsync({ id: logged.id, session_id: sessionId }).catch(() => {});
+    }
     try {
       await logSet.mutateAsync({
         session_id: sessionId,
@@ -202,118 +207,94 @@ function SetRow({
         reps: r,
         weight_kg: displayToKg(w, unit),
       });
+      setEditing(false);
       onLogged();
     } catch (e: any) {
       Alert.alert('Could not log set', e.message ?? String(e));
     }
   };
 
-  const onUndo = () => {
+  const onTapLogged = () => {
     if (!logged) return;
-    Alert.alert('Undo set?', `Remove Set ${setNum}?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(`Set ${setNum}`, undefined, [
       {
-        text: 'Undo',
+        text: 'Edit',
+        onPress: () => {
+          // Pre-fill inputs with current logged values
+          setReps(String(logged.reps ?? ''));
+          setWeight(String(kgToDisplay(logged.weight_kg, unit) ?? ''));
+          setRepsTouched(true);
+          setWeightTouched(true);
+          setEditing(true);
+        },
+      },
+      {
+        text: 'Remove',
         style: 'destructive',
         onPress: () => deleteSet.mutate({ id: logged.id, session_id: sessionId }),
       },
+      { text: 'Cancel', style: 'cancel' },
     ]);
   };
 
-  const displayReps = isLogged
-    ? String(logged.reps ?? '')
-    : repsTouched
-    ? reps
-    : prefilledReps;
-  const displayWeight = isLogged
-    ? String(kgToDisplay(logged.weight_kg, unit) ?? '')
-    : weightTouched
-    ? weight
-    : prefilledWeight;
-
-  return (
-    <View
-      style={[
-        setStyles.row,
-        {
-          backgroundColor: isLogged ? doneBg : 'transparent',
-          borderBottomColor: border,
-        },
-      ]}>
-      <View style={setStyles.numCell}>
-        <Text style={{ color: muted, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>{setNum}</Text>
-        {overloadDiff !== null && (
-          <Text style={{ fontSize: 9, fontWeight: '700', textAlign: 'center', color: overloadDiff > 0 ? '#22c55e' : '#ef4444' }}>
-            {overloadDiff > 0 ? '▲' : '▼'}
+  // Collapsed view for logged sets
+  if (logged && !editing) {
+    const w = formatWeight(logged.weight_kg, unit);
+    const diff = overloadDiff;
+    return (
+      <Pressable
+        onPress={onTapLogged}
+        style={[setStyles.collapsedRow, { backgroundColor: doneBg, borderBottomColor: border }]}>
+        <Ionicons name="checkmark-circle" size={18} color={tint} style={{ marginRight: 8 }} />
+        <Text style={{ color: textColor, fontSize: 14, flex: 1 }}>
+          <Text style={{ fontWeight: '600' }}>Set {setNum}</Text>
+          {'  '}{logged.reps ?? '–'} × {w}
+        </Text>
+        {diff !== null && (
+          <Text style={{ fontSize: 11, fontWeight: '700', color: diff > 0 ? '#22c55e' : '#ef4444', marginRight: 6 }}>
+            {diff > 0 ? '▲' : '▼'}{Math.abs(diff)}{unit}
           </Text>
         )}
+        <Ionicons name="ellipsis-horizontal" size={16} color={muted} />
+      </Pressable>
+    );
+  }
+
+  const displayReps = repsTouched ? reps : prefilledReps;
+  const displayWeight = weightTouched ? weight : prefilledWeight;
+
+  return (
+    <View style={[setStyles.row, { backgroundColor: 'transparent', borderBottomColor: border }]}>
+      <View style={setStyles.numCell}>
+        <Text style={{ color: muted, fontSize: 14, fontWeight: '600', textAlign: 'center' }}>{setNum}</Text>
       </View>
       <TextInput
-        style={[
-          setStyles.input,
-          { color: repsColor, borderColor: border },
-          isLogged && setStyles.inputLogged,
-        ]}
+        style={[setStyles.input, { color: repsColor, borderColor: border }]}
         value={displayReps}
         placeholder="–"
         placeholderTextColor={muted}
-        editable={!isLogged}
         keyboardType="number-pad"
         selectTextOnFocus
-        onFocus={() => {
-          if (!repsTouched) {
-            setReps(prefilledReps);
-            setRepsTouched(true);
-          }
-        }}
-        onChangeText={(t) => {
-          setReps(t);
-          setRepsTouched(true);
-        }}
+        onFocus={() => { if (!repsTouched) { setReps(prefilledReps); setRepsTouched(true); } }}
+        onChangeText={(t) => { setReps(t); setRepsTouched(true); }}
       />
       <TextInput
-        style={[
-          setStyles.input,
-          { color: weightColor, borderColor: border },
-          isLogged && setStyles.inputLogged,
-        ]}
+        style={[setStyles.input, { color: weightColor, borderColor: border }]}
         value={displayWeight}
         placeholder="–"
         placeholderTextColor={muted}
-        editable={!isLogged}
         keyboardType="decimal-pad"
         selectTextOnFocus
-        onFocus={() => {
-          if (!weightTouched) {
-            setWeight(prefilledWeight);
-            setWeightTouched(true);
-          }
-        }}
-        onChangeText={(t) => {
-          setWeight(t);
-          setWeightTouched(true);
-        }}
+        onFocus={() => { if (!weightTouched) { setWeight(prefilledWeight); setWeightTouched(true); } }}
+        onChangeText={(t) => { setWeight(t); setWeightTouched(true); }}
       />
-      {isLogged ? (
-        <Pressable onPress={onUndo} hitSlop={6} style={setStyles.check}>
-          <Ionicons name="checkmark-circle" size={28} color={tint} />
-        </Pressable>
-      ) : (
-        <Pressable
-          onPress={onTick}
-          disabled={logSet.isPending}
-          hitSlop={6}
-          style={({ pressed }) => [
-            setStyles.check,
-            { opacity: pressed ? 0.5 : 1 },
-          ]}>
-          <Ionicons
-            name="checkmark-circle-outline"
-            size={28}
-            color={muted}
-          />
-        </Pressable>
-      )}
+      <Pressable
+        onPress={onTick}
+        disabled={logSet.isPending}
+        hitSlop={6}
+        style={({ pressed }) => [setStyles.check, { opacity: pressed ? 0.5 : 1 }]}>
+        <Ionicons name={editing ? 'checkmark-circle' : 'checkmark-circle-outline'} size={28} color={editing ? tint : muted} />
+      </Pressable>
     </View>
   );
 }
@@ -365,6 +346,12 @@ const setStyles = StyleSheet.create({
     marginHorizontal: 4,
     fontSize: 16,
   },
-  inputLogged: { borderColor: 'transparent' },
   check: { width: 40, alignItems: 'center' },
+  collapsedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
 });

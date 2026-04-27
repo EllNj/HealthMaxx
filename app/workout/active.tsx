@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Modal,
   Pressable,
   ScrollView,
@@ -31,9 +33,21 @@ import {
 
 type RestState = {
   exerciseName: string;
-  remaining: number;
-  total: number;
+  endsAt: number;   // Date.now() + duration ms
+  total: number;    // original duration in seconds
 };
+
+async function scheduleRestNotification(seconds: number, exerciseName: string) {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Rest done',
+      body: `Time to go — ${exerciseName}`,
+      sound: true,
+    },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds },
+  });
+}
 
 export default function ActiveSessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -91,25 +105,36 @@ export default function ActiveSessionScreen() {
     return () => clearInterval(interval);
   }, [session?.started_at]);
 
+  // Recompute remaining from endsAt each tick — snaps correctly on foreground resume
   useEffect(() => {
     if (!rest) return;
     const interval = setInterval(() => {
-      setRest((r) => {
-        if (!r) return r;
-        if (r.remaining <= 1) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-          return null;
-        }
-        return { ...r, remaining: r.remaining - 1 };
-      });
-    }, 1000);
+      const remaining = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000));
+      if (remaining === 0) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        Notifications.cancelAllScheduledNotificationsAsync();
+        setRest(null);
+      } else {
+        setRest((r) => r ? { ...r } : r); // trigger re-render so UI reads latest endsAt
+      }
+    }, 500);
     return () => clearInterval(interval);
-  }, [rest !== null]);
+  }, [rest?.endsAt]);
+
+  // When app comes back to foreground, force a re-render to snap the timer
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setRest((r) => r ? { ...r } : r);
+    });
+    return () => sub.remove();
+  }, []);
 
   const onSetLogged = (restSeconds: number, exerciseName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     if (restSeconds > 0) {
-      setRest({ exerciseName, remaining: restSeconds, total: restSeconds });
+      const endsAt = Date.now() + restSeconds * 1000;
+      setRest({ exerciseName, endsAt, total: restSeconds });
+      scheduleRestNotification(restSeconds, exerciseName).catch(() => {});
     }
   };
 
@@ -234,8 +259,7 @@ export default function ActiveSessionScreen() {
               r
                 ? {
                     ...r,
-                    remaining: Math.max(1, r.remaining + delta),
-                    total: Math.max(r.total, r.remaining + delta),
+                    endsAt: Math.max(Date.now() + 1000, r.endsAt + delta * 1000),
                   }
                 : r
             )
@@ -287,8 +311,9 @@ function RestBar({
   const muted = scheme === 'dark' ? '#9BA1A6' : '#687076';
   const bg = scheme === 'dark' ? '#1f2224' : '#ffffff';
   const onTint = scheme === 'dark' ? '#000' : '#fff';
-  const m = Math.floor(rest.remaining / 60);
-  const s = rest.remaining % 60;
+  const remaining = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000));
+  const m = Math.floor(remaining / 60);
+  const s = remaining % 60;
 
   return (
     <View
