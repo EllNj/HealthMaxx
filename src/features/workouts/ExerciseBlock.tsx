@@ -35,6 +35,7 @@ export function ExerciseBlock({ block, sessionId, sets, scheme, onSetLogged, onR
   const { data: lastPerf } = useLastPerformance(block.exercise.id, sessionId);
 
   const [extraRows, setExtraRows] = useState(0);
+  const [sessionPrefill, setSessionPrefill] = useState<{ reps: number; weight_kg: number } | null>(null);
   const loggedSetNumbers = new Set(exerciseSets.map((s) => s.set_number));
   const maxLoggedSet = exerciseSets.reduce((m, s) => Math.max(m, s.set_number), 0);
   const totalRows = Math.max(block.target_sets, maxLoggedSet) + extraRows;
@@ -112,6 +113,7 @@ export function ExerciseBlock({ block, sessionId, sets, scheme, onSetLogged, onR
             setNum={setNum}
             logged={logged}
             prefill={prefill}
+            sessionPrefill={logged ? null : sessionPrefill}
             unit={block.exercise.display_unit}
             sessionId={sessionId}
             exerciseId={block.exercise.id}
@@ -126,6 +128,24 @@ export function ExerciseBlock({ block, sessionId, sets, scheme, onSetLogged, onR
           />
         );
       })}
+
+      {exerciseSets.length > 0 && (
+        <Pressable
+          onPress={() => {
+            const last = exerciseSets[exerciseSets.length - 1];
+            setSessionPrefill({ reps: last.reps ?? 0, weight_kg: last.weight_kg ?? 0 });
+          }}
+          style={({ pressed }) => [
+            styles.copyBtn,
+            { borderColor: border, opacity: pressed ? 0.6 : 1 },
+          ]}
+          hitSlop={6}>
+          <Ionicons name="copy-outline" size={14} color={muted} />
+          <Text style={{ color: muted, fontSize: 12, fontWeight: '600' }}>
+            Copy set {exerciseSets[exerciseSets.length - 1].set_number}
+          </Text>
+        </Pressable>
+      )}
 
       <Pressable
         onPress={() => setExtraRows((n) => n + 1)}
@@ -145,6 +165,7 @@ type SetRowProps = {
   setNum: number;
   logged: WorkoutSet | undefined;
   prefill: WorkoutSet | null;
+  sessionPrefill: { reps: number; weight_kg: number } | null;
   unit: 'kg' | 'lbs';
   sessionId: string;
   exerciseId: string;
@@ -162,6 +183,7 @@ function SetRow({
   setNum,
   logged,
   prefill,
+  sessionPrefill,
   unit,
   sessionId,
   exerciseId,
@@ -176,9 +198,12 @@ function SetRow({
   const logSet = useLogSet();
   const deleteSet = useDeleteSet();
 
-  const prefilledReps = prefill?.reps != null ? String(prefill.reps) : '';
-  const prefilledWeight =
-    prefill?.weight_kg != null ? String(kgToDisplay(prefill.weight_kg, unit) ?? '') : '';
+  const prefilledReps = sessionPrefill != null
+    ? String(sessionPrefill.reps)
+    : (prefill?.reps != null ? String(prefill.reps) : '');
+  const prefilledWeight = sessionPrefill != null
+    ? String(kgToDisplay(sessionPrefill.weight_kg, unit) ?? '')
+    : (prefill?.weight_kg != null ? String(kgToDisplay(prefill.weight_kg, unit) ?? '') : '');
 
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
@@ -330,6 +355,16 @@ const styles = StyleSheet.create({
   hNum: { width: 36, textAlign: 'center' },
   hInput: { flex: 1, textAlign: 'center' },
   hCheck: { width: 40, textAlign: 'center' },
+  copyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    marginTop: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+  },
   addSetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
