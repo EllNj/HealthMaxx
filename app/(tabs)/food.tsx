@@ -4,10 +4,12 @@ import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
@@ -25,9 +27,7 @@ import {
 } from '@/src/features/food/useFoodEntries';
 import { useSavedMeals, useDeleteSavedMeal, type SavedMeal } from '@/src/features/food/useSavedMeals';
 import { useWeeklyNutrition } from '@/src/features/food/useWeeklyNutrition';
-
-// Hardcoded goals from user profile
-const GOALS = { calories: 3000, protein_g: 200, carbs_g: 340, fat_g: 90 };
+import { useProfile, useUpdateGoals, type NutritionGoals } from '@/src/features/profile/useProfile';
 
 const RING_SIZE = 160;
 const STROKE = 14;
@@ -52,8 +52,19 @@ export default function FoodScreen() {
   const deleteSavedMeal = useDeleteSavedMeal();
   const logFood = useLogFood();
   const { data: weeklyNutrition } = useWeeklyNutrition(userId);
+  const { data: profile } = useProfile(userId);
+  const updateGoals = useUpdateGoals();
 
-  const calPct = Math.min(totals.calories / GOALS.calories, 1);
+  const goals = {
+    calories: profile?.calorie_goal ?? 3000,
+    protein_g: profile?.protein_goal_g ?? 200,
+    carbs_g: profile?.carbs_goal_g ?? 340,
+    fat_g: profile?.fat_goal_g ?? 90,
+  };
+
+  const [goalsOpen, setGoalsOpen] = useState(false);
+
+  const calPct = Math.min(totals.calories / goals.calories, 1);
   const strokeDashoffset = CIRCUMFERENCE * (1 - calPct);
 
   const todayLabel = useMemo(() => {
@@ -61,8 +72,8 @@ export default function FoodScreen() {
   }, []);
 
   const maxCal = useMemo(() => {
-    return Math.max(...(weeklyNutrition ?? []).map((d) => d.calories), GOALS.calories);
-  }, [weeklyNutrition]);
+    return Math.max(...(weeklyNutrition ?? []).map((d) => d.calories), goals.calories);
+  }, [weeklyNutrition, goals.calories]);
 
   const onDelete = (entry: FoodEntry) => {
     Alert.alert('Delete entry?', entry.description ?? 'This food entry', [
@@ -105,6 +116,16 @@ export default function FoodScreen() {
     }
   };
 
+  const onSaveGoals = async (updated: NutritionGoals) => {
+    if (!userId) return;
+    try {
+      await updateGoals.mutateAsync({ userId, goals: updated });
+      setGoalsOpen(false);
+    } catch (e: any) {
+      Alert.alert('Could not save', e.message ?? String(e));
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -112,15 +133,23 @@ export default function FoodScreen() {
           <Text style={[styles.title, { color: c.text }]}>Food</Text>
           <Text style={[styles.dateLabel, { color: muted }]}>{todayLabel}</Text>
         </View>
-        <Pressable
-          onPress={() => router.push('/food/capture' as Href)}
-          style={({ pressed }) => [
-            styles.logBtn,
-            { backgroundColor: c.tint, opacity: pressed ? 0.7 : 1 },
-          ]}>
-          <Ionicons name="add" size={20} color={onTint} />
-          <Text style={[styles.logBtnText, { color: onTint }]}>Log food</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Pressable
+            onPress={() => setGoalsOpen(true)}
+            hitSlop={8}
+            style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+            <Ionicons name="settings-outline" size={22} color={muted} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/food/capture' as Href)}
+            style={({ pressed }) => [
+              styles.logBtn,
+              { backgroundColor: c.tint, opacity: pressed ? 0.7 : 1 },
+            ]}>
+            <Ionicons name="add" size={20} color={onTint} />
+            <Text style={[styles.logBtnText, { color: onTint }]}>Log food</Text>
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -138,22 +167,22 @@ export default function FoodScreen() {
             </Svg>
             <View style={styles.ringCenter} pointerEvents="none">
               <Text style={[styles.ringCal, { color: c.text }]}>{Math.round(totals.calories)}</Text>
-              <Text style={[styles.ringLabel, { color: muted }]}>/ {GOALS.calories} kcal</Text>
+              <Text style={[styles.ringLabel, { color: muted }]}>/ {goals.calories} kcal</Text>
             </View>
           </View>
 
           {/* Macro bars */}
           <View style={styles.macroPanel}>
-            <MacroBar label="Protein" value={totals.protein_g} goal={GOALS.protein_g} color="#4CAF50" muted={muted} textColor={c.text} />
-            <MacroBar label="Carbs" value={totals.carbs_g} goal={GOALS.carbs_g} color="#2196F3" muted={muted} textColor={c.text} />
-            <MacroBar label="Fat" value={totals.fat_g} goal={GOALS.fat_g} color="#FF9800" muted={muted} textColor={c.text} />
+            <MacroBar label="Protein" value={totals.protein_g} goal={goals.protein_g} color="#4CAF50" muted={muted} textColor={c.text} />
+            <MacroBar label="Carbs" value={totals.carbs_g} goal={goals.carbs_g} color="#2196F3" muted={muted} textColor={c.text} />
+            <MacroBar label="Fat" value={totals.fat_g} goal={goals.fat_g} color="#FF9800" muted={muted} textColor={c.text} />
           </View>
         </View>
 
         {/* Remaining stats */}
         <View style={[styles.remainRow, { backgroundColor: cardBg, borderColor: border }]}>
-          <RemainStat label="Remaining" value={Math.max(0, GOALS.calories - Math.round(totals.calories))} unit="kcal" textColor={c.text} muted={muted} />
-          <RemainStat label="Protein left" value={Math.max(0, Math.round(GOALS.protein_g - totals.protein_g))} unit="g" textColor={c.text} muted={muted} />
+          <RemainStat label="Remaining" value={Math.max(0, goals.calories - Math.round(totals.calories))} unit="kcal" textColor={c.text} muted={muted} />
+          <RemainStat label="Protein left" value={Math.max(0, Math.round(goals.protein_g - totals.protein_g))} unit="g" textColor={c.text} muted={muted} />
           <RemainStat label="Entries" value={(entries ?? []).length} unit="" textColor={c.text} muted={muted} />
         </View>
 
@@ -184,7 +213,7 @@ export default function FoodScreen() {
                 {weeklyNutrition.map((d, i) => {
                   const pct = d.calories / maxCal;
                   const isToday = d.label === 'Today';
-                  const atGoal = d.calories >= GOALS.calories * 0.9;
+                  const atGoal = d.calories >= goals.calories * 0.9;
                   const color = isToday ? c.tint : atGoal ? '#4CAF50' : (scheme === 'dark' ? '#3a3d42' : '#d0d4d8');
                   return (
                     <View key={i} style={styles.trendCol}>
@@ -200,7 +229,7 @@ export default function FoodScreen() {
                   );
                 })}
               </View>
-              <Text style={[styles.trendGoalLine, { color: muted }]}>Goal: {GOALS.calories.toLocaleString()} kcal · Green = on target</Text>
+              <Text style={[styles.trendGoalLine, { color: muted }]}>Goal: {goals.calories.toLocaleString()} kcal · Green = on target</Text>
             </View>
           </View>
         )}
@@ -270,6 +299,99 @@ export default function FoodScreen() {
           ))}
         </View>
       </ScrollView>
+
+      <GoalsModal
+        visible={goalsOpen}
+        current={profile ?? { calorie_goal: goals.calories, protein_goal_g: goals.protein_g, carbs_goal_g: goals.carbs_g, fat_goal_g: goals.fat_g }}
+        saving={updateGoals.isPending}
+        onSave={onSaveGoals}
+        onClose={() => setGoalsOpen(false)}
+        scheme={scheme}
+      />
+    </View>
+  );
+}
+
+function GoalsModal({ visible, current, saving, onSave, onClose, scheme }: {
+  visible: boolean;
+  current: NutritionGoals;
+  saving: boolean;
+  onSave: (g: NutritionGoals) => void;
+  onClose: () => void;
+  scheme: 'light' | 'dark';
+}) {
+  const c = Colors[scheme];
+  const border = scheme === 'dark' ? '#2a2d30' : '#e3e5e8';
+  const muted = scheme === 'dark' ? '#9BA1A6' : '#687076';
+  const bg = scheme === 'dark' ? '#1f2224' : '#ffffff';
+  const onTint = scheme === 'dark' ? '#000' : '#fff';
+  const insets = useSafeAreaInsets();
+
+  const [calories, setCalories] = useState('');
+  const [protein, setProtein] = useState('');
+  const [carbs, setCarbs] = useState('');
+  const [fat, setFat] = useState('');
+
+  // Sync inputs when modal opens
+  const onShow = () => {
+    setCalories(String(current.calorie_goal));
+    setProtein(String(current.protein_goal_g));
+    setCarbs(String(current.carbs_goal_g));
+    setFat(String(current.fat_goal_g));
+  };
+
+  const onSubmit = () => {
+    const cal = parseInt(calories, 10);
+    const p = parseInt(protein, 10);
+    const cb = parseInt(carbs, 10);
+    const f = parseInt(fat, 10);
+    if (!cal || !p || !cb || !f || cal < 1 || p < 1 || cb < 1 || f < 1) {
+      Alert.alert('Invalid values', 'All goals must be positive numbers.');
+      return;
+    }
+    onSave({ calorie_goal: cal, protein_goal_g: p, carbs_goal_g: cb, fat_goal_g: f });
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onShow={onShow} onRequestClose={onClose}>
+      <Pressable style={{ flex: 1 }} onPress={onClose} />
+      <View style={[goalStyles.sheet, { backgroundColor: bg, borderTopColor: border, paddingBottom: insets.bottom + 16 }]}>
+        <View style={[goalStyles.handle, { backgroundColor: muted }]} />
+        <Text style={[goalStyles.sheetTitle, { color: c.text }]}>Nutrition goals</Text>
+
+        <GoalInput label="Calories" unit="kcal" value={calories} onChange={setCalories} border={border} textColor={c.text} muted={muted} />
+        <GoalInput label="Protein" unit="g" value={protein} onChange={setProtein} border={border} textColor={c.text} muted={muted} />
+        <GoalInput label="Carbs" unit="g" value={carbs} onChange={setCarbs} border={border} textColor={c.text} muted={muted} />
+        <GoalInput label="Fat" unit="g" value={fat} onChange={setFat} border={border} textColor={c.text} muted={muted} />
+
+        <Pressable
+          onPress={onSubmit}
+          disabled={saving}
+          style={({ pressed }) => [goalStyles.saveBtn, { backgroundColor: c.tint, opacity: pressed || saving ? 0.7 : 1 }]}>
+          <Text style={[goalStyles.saveBtnText, { color: onTint }]}>{saving ? 'Saving…' : 'Save goals'}</Text>
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
+function GoalInput({ label, unit, value, onChange, border, textColor, muted }: {
+  label: string; unit: string; value: string; onChange: (v: string) => void;
+  border: string; textColor: string; muted: string;
+}) {
+  return (
+    <View style={goalStyles.inputRow}>
+      <Text style={[goalStyles.inputLabel, { color: textColor }]}>{label}</Text>
+      <View style={[goalStyles.inputWrap, { borderColor: border }]}>
+        <TextInput
+          style={[goalStyles.input, { color: textColor }]}
+          value={value}
+          onChangeText={onChange}
+          keyboardType="number-pad"
+          selectTextOnFocus
+        />
+        <Text style={[goalStyles.inputUnit, { color: muted }]}>{unit}</Text>
+      </View>
     </View>
   );
 }
@@ -409,7 +531,6 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 16, marginBottom: 4 },
   sectionHeader: { fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 },
   emptyCard: { borderWidth: 1, borderRadius: 12, padding: 20 },
-  // Trends
   trendCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 8 },
   trendChart: { flexDirection: 'row', alignItems: 'flex-end', height: 72, gap: 4 },
   trendCol: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: 72 },
@@ -417,14 +538,8 @@ const styles = StyleSheet.create({
   trendBarInner: { width: '100%', borderRadius: 3 },
   trendLabel: { fontSize: 9, fontWeight: '600', marginTop: 4 },
   trendGoalLine: { fontSize: 11, marginTop: 8 },
-  // Saved meals
   savedRow: { paddingBottom: 4, gap: 10 },
-  savedCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    width: 140,
-  },
+  savedCard: { borderWidth: 1, borderRadius: 12, padding: 12, width: 140 },
   savedName: { fontSize: 13, fontWeight: '600', marginBottom: 4, lineHeight: 18 },
   savedCal: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
   savedMacros: { fontSize: 11, marginBottom: 10 },
@@ -448,15 +563,29 @@ const remainStyles = StyleSheet.create({
 });
 
 const entryStyles = StyleSheet.create({
-  card: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-  },
+  card: { borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 10 },
   desc: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
   macros: { fontSize: 13, marginBottom: 2 },
   micro: { fontSize: 12, marginBottom: 2, fontStyle: 'italic' },
   time: { fontSize: 11 },
   deleteBtn: { padding: 4, marginLeft: 8 },
+});
+
+const goalStyles = StyleSheet.create({
+  sheet: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16, opacity: 0.4 },
+  sheetTitle: { fontSize: 18, fontWeight: '700', marginBottom: 20 },
+  inputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  inputLabel: { fontSize: 15, fontWeight: '500', flex: 1 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, gap: 6 },
+  input: { fontSize: 16, fontWeight: '600', minWidth: 60, textAlign: 'right' },
+  inputUnit: { fontSize: 13 },
+  saveBtn: { marginTop: 8, paddingVertical: 14, borderRadius: 14, alignItems: 'center' },
+  saveBtnText: { fontSize: 16, fontWeight: '700' },
 });

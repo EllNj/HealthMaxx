@@ -22,10 +22,9 @@ import {
   useLogBodyWeight,
   useDeleteBodyWeightLog,
 } from '@/src/features/profile/useBodyWeight';
+import { useProfile } from '@/src/features/profile/useProfile';
 import { useSessionHistory, useWeeklyVolume } from '@/src/features/workouts/useSessions';
 import { supabase } from '@/src/lib/supabase';
-
-const GOALS = { calories: 3000, protein_g: 200, carbs_g: 340, fat_g: 90 };
 const RING_SIZE = 160;
 const RING_STROKE = 14;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
@@ -48,7 +47,15 @@ export default function DashboardScreen() {
   const { data: history } = useSessionHistory(userId, 1);
   const { data: weeklyVolume } = useWeeklyVolume(userId);
   const { data: weightLogs } = useBodyWeightLogs(userId, 7);
+  const { data: profile } = useProfile(userId);
   const logWeight = useLogBodyWeight();
+
+  const GOALS = {
+    calories: profile?.calorie_goal ?? 3000,
+    protein_g: profile?.protein_goal_g ?? 200,
+    carbs_g: profile?.carbs_goal_g ?? 340,
+    fat_g: profile?.fat_goal_g ?? 90,
+  };
   const deleteWeight = useDeleteBodyWeightLog();
 
   const [addingWeight, setAddingWeight] = useState(false);
