@@ -37,16 +37,24 @@ type RestState = {
   total: number;    // original duration in seconds
 };
 
-async function scheduleRestNotification(seconds: number, exerciseName: string) {
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Rest done',
-      body: `Time to go — ${exerciseName}`,
-      sound: true,
-    },
-    trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds },
-  });
+async function scheduleRestNotification(
+  seconds: number,
+  exerciseName: string,
+  prevId: string | null
+): Promise<string | null> {
+  if (prevId) Notifications.cancelScheduledNotificationAsync(prevId).catch(() => {});
+  try {
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Rest done',
+        body: `Time to go — ${exerciseName}`,
+        sound: true,
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds },
+    });
+  } catch {
+    return null;
+  }
 }
 
 export default function ActiveSessionScreen() {
@@ -71,6 +79,7 @@ export default function ActiveSessionScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [adHocExercises, setAdHocExercises] = useState<Exercise[]>([]);
   const startedAt = useRef<number | null>(null);
+  const restNotifIdRef = useRef<string | null>(null);
 
   const allBlocks = useMemo<SessionExerciseBlock[]>(() => {
     const existing = blocks ?? [];
@@ -112,7 +121,10 @@ export default function ActiveSessionScreen() {
       const remaining = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000));
       if (remaining === 0) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        Notifications.cancelAllScheduledNotificationsAsync();
+        if (restNotifIdRef.current) {
+          Notifications.cancelScheduledNotificationAsync(restNotifIdRef.current).catch(() => {});
+          restNotifIdRef.current = null;
+        }
         setRest(null);
       } else {
         setRest((r) => r ? { ...r } : r); // trigger re-render so UI reads latest endsAt
@@ -134,7 +146,9 @@ export default function ActiveSessionScreen() {
     if (restSeconds > 0) {
       const endsAt = Date.now() + restSeconds * 1000;
       setRest({ exerciseName, endsAt, total: restSeconds });
-      scheduleRestNotification(restSeconds, exerciseName).catch(() => {});
+      scheduleRestNotification(restSeconds, exerciseName, restNotifIdRef.current)
+        .then((id) => { restNotifIdRef.current = id; })
+        .catch(() => {});
     }
   };
 

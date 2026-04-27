@@ -37,6 +37,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [session, loading, segments]);
 
+  useEffect(() => {
+    if (session) {
+      Notifications.requestPermissionsAsync().catch(() => {});
+    }
+  }, [!!session]);
+
   if (loading) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

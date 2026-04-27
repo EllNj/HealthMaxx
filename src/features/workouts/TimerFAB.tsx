@@ -28,7 +28,6 @@ const PRESETS = [
 ];
 
 async function scheduleFinishNotification(seconds: number): Promise<string> {
-  await Notifications.cancelAllScheduledNotificationsAsync();
   return Notifications.scheduleNotificationAsync({
     content: {
       title: 'Timer done',
@@ -39,8 +38,8 @@ async function scheduleFinishNotification(seconds: number): Promise<string> {
   });
 }
 
-async function cancelFinishNotification() {
-  await Notifications.cancelAllScheduledNotificationsAsync();
+function cancelFinishNotification(id: string | null) {
+  if (id) Notifications.cancelScheduledNotificationAsync(id).catch(() => {});
 }
 
 export function TimerFAB() {
@@ -89,6 +88,8 @@ export function TimerFAB() {
   };
 
   const startCountdown = async (seconds: number) => {
+    cancelFinishNotification(notifIdRef.current);
+    notifIdRef.current = null;
     setRemaining(seconds);
     setMode('countdown');
     setOpen(false);
@@ -111,7 +112,7 @@ export function TimerFAB() {
     setMode('idle');
     setRemaining(0);
     setElapsed(0);
-    cancelFinishNotification();
+    cancelFinishNotification(notifIdRef.current);
     notifIdRef.current = null;
   };
 

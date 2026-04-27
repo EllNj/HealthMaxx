@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,12 +36,26 @@ export default function WorkoutsScreen() {
 
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
-  const { data: templates, isLoading, error } = useTemplates();
+  const { data: templates, isLoading, error, refetch: refetchTemplates } = useTemplates();
   const createTemplate = useCreateTemplate();
   const { data: active } = useActiveSession(session?.user.id);
   const startSession = useStartSessionFromTemplate();
   const startEmpty = useStartEmptySession();
-  const { data: history } = useSessionHistory(session?.user.id, 60);
+  const { data: history, refetch: refetchHistory } = useSessionHistory(session?.user.id, 60);
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([refetchTemplates(), refetchHistory()]);
+    setRefreshing(false);
+  };
+
+  const lastUsedTemplate = useMemo(() => {
+    if (!history || !templates) return null;
+    const lastWithTemplate = history.find((s) => s.template_id);
+    if (!lastWithTemplate) return null;
+    return templates.find((t) => t.id === lastWithTemplate.template_id) ?? null;
+  }, [history, templates]);
 
   const onNewTemplate = async () => {
     if (!session?.user.id) return;
@@ -108,7 +123,9 @@ export default function WorkoutsScreen() {
     <View style={{ flex: 1, backgroundColor: c.background }}>
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ paddingBottom: 100 }}>
+      contentContainerStyle={{ paddingBottom: 100 }}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Text style={[styles.title, { color: c.text }]}>Workouts</Text>
       </View>
@@ -128,6 +145,26 @@ export default function WorkoutsScreen() {
               </Text>
             </View>
             <Ionicons name="play-forward" size={20} color={onTint} />
+          </Pressable>
+        </View>
+      )}
+
+      {!active && lastUsedTemplate && (
+        <View style={styles.section}>
+          <Pressable
+            onPress={() => onStart(lastUsedTemplate.id, lastUsedTemplate.name)}
+            disabled={startSession.isPending}
+            style={({ pressed }) => [
+              styles.quickStartCard,
+              { backgroundColor: cardBg, borderColor: c.tint, opacity: pressed ? 0.8 : 1 },
+            ]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.resumeLabel, { color: c.tint }]}>QUICK START</Text>
+              <Text style={[styles.resumeTitle, { color: c.text }]} numberOfLines={1}>
+                {lastUsedTemplate.name}
+              </Text>
+            </View>
+            <Ionicons name="play" size={20} color={c.tint} />
           </Pressable>
         </View>
       )}
@@ -508,4 +545,12 @@ const styles = StyleSheet.create({
   },
   resumeLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 0.8, marginBottom: 2 },
   resumeTitle: { fontSize: 17, fontWeight: '700' },
+  quickStartCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 16,
+    gap: 10,
+  },
 });

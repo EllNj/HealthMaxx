@@ -6,6 +6,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,8 +22,9 @@ import { useAuth } from '@/src/features/auth/useAuth';
 import {
   useDeleteFoodEntry,
   useDayTotals,
+  useEntriesForDate,
   useLogFood,
-  useTodayEntries,
+  localDateString,
   type FoodEntry,
 } from '@/src/features/food/useFoodEntries';
 import { useSavedMeals, useDeleteSavedMeal, type SavedMeal } from '@/src/features/food/useSavedMeals';
@@ -45,7 +47,18 @@ export default function FoodScreen() {
 
   const { session } = useAuth();
   const userId = session?.user.id;
-  const { data: entries, isLoading } = useTodayEntries(userId);
+
+  const [viewDate, setViewDate] = useState(() => localDateString());
+  const isToday = viewDate === localDateString();
+
+  const { data: entries, isLoading, refetch: refetchEntries } = useEntriesForDate(userId, viewDate);
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await refetchEntries();
+    setRefreshing(false);
+  };
+
   const totals = useDayTotals(entries);
   const deleteEntry = useDeleteFoodEntry();
   const { data: savedMeals } = useSavedMeals(userId);
@@ -67,9 +80,30 @@ export default function FoodScreen() {
   const calPct = Math.min(totals.calories / goals.calories, 1);
   const strokeDashoffset = CIRCUMFERENCE * (1 - calPct);
 
-  const todayLabel = useMemo(() => {
-    return new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
-  }, []);
+  const dateNavLabel = useMemo(() => {
+    if (isToday) return 'Today';
+    const d = new Date(viewDate + 'T12:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((today.getTime() - d.setHours(0, 0, 0, 0)) / 86400000);
+    if (diff === 1) return 'Yesterday';
+    return new Date(viewDate + 'T12:00:00').toLocaleDateString(undefined, {
+      weekday: 'short', day: 'numeric', month: 'short',
+    });
+  }, [viewDate, isToday]);
+
+  const goBack = () => {
+    const d = new Date(viewDate + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    setViewDate(localDateString(d));
+  };
+
+  const goForward = () => {
+    if (isToday) return;
+    const d = new Date(viewDate + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    setViewDate(localDateString(d));
+  };
 
   const maxCal = useMemo(() => {
     return Math.max(...(weeklyNutrition ?? []).map((d) => d.calories), goals.calories);
@@ -129,10 +163,7 @@ export default function FoodScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <View>
-          <Text style={[styles.title, { color: c.text }]}>Food</Text>
-          <Text style={[styles.dateLabel, { color: muted }]}>{todayLabel}</Text>
-        </View>
+        <Text style={[styles.title, { color: c.text }]}>Food</Text>
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           <Pressable
             onPress={() => setGoalsOpen(true)}
@@ -140,19 +171,39 @@ export default function FoodScreen() {
             style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
             <Ionicons name="settings-outline" size={22} color={muted} />
           </Pressable>
-          <Pressable
-            onPress={() => router.push('/food/capture' as Href)}
-            style={({ pressed }) => [
-              styles.logBtn,
-              { backgroundColor: c.tint, opacity: pressed ? 0.7 : 1 },
-            ]}>
-            <Ionicons name="add" size={20} color={onTint} />
-            <Text style={[styles.logBtnText, { color: onTint }]}>Log food</Text>
-          </Pressable>
+          {isToday && (
+            <Pressable
+              onPress={() => router.push('/food/capture' as Href)}
+              style={({ pressed }) => [
+                styles.logBtn,
+                { backgroundColor: c.tint, opacity: pressed ? 0.7 : 1 },
+              ]}>
+              <Ionicons name="add" size={20} color={onTint} />
+              <Text style={[styles.logBtnText, { color: onTint }]}>Log food</Text>
+            </Pressable>
+          )}
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+      {/* Date navigation */}
+      <View style={[styles.dateNav, { borderColor: border }]}>
+        <Pressable onPress={goBack} hitSlop={10} style={styles.dateNavBtn}>
+          <Ionicons name="chevron-back" size={20} color={c.text} />
+        </Pressable>
+        <Text style={[styles.dateNavLabel, { color: c.text }]}>{dateNavLabel}</Text>
+        <Pressable
+          onPress={goForward}
+          hitSlop={10}
+          disabled={isToday}
+          style={[styles.dateNavBtn, { opacity: isToday ? 0.25 : 1 }]}>
+          <Ionicons name="chevron-forward" size={20} color={c.text} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         {/* Calorie ring */}
         <View style={styles.ringSection}>
           <View style={styles.ringWrapper}>
@@ -268,7 +319,9 @@ export default function FoodScreen() {
 
         {/* Entry list */}
         <View style={styles.section}>
-          <Text style={[styles.sectionHeader, { color: muted }]}>Today's entries</Text>
+          <Text style={[styles.sectionHeader, { color: muted }]}>
+            {isToday ? "Today's entries" : `${dateNavLabel}'s entries`}
+          </Text>
 
           {isLoading && (
             <View style={{ padding: 24, alignItems: 'center' }}>
@@ -279,8 +332,10 @@ export default function FoodScreen() {
           {!isLoading && (entries ?? []).length === 0 && (
             <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: border }]}>
               <Text style={{ color: muted, textAlign: 'center' }}>
-                Nothing logged yet today. Tap{' '}
-                <Text style={{ fontWeight: '600', color: c.text }}>Log food</Text> to get started.
+                Nothing logged{isToday ? ' yet today' : ` on ${dateNavLabel}`}.
+                {isToday && (
+                  <Text> Tap <Text style={{ fontWeight: '600', color: c.text }}>Log food</Text> to get started.</Text>
+                )}
               </Text>
             </View>
           )}
@@ -487,10 +542,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
   title: { fontSize: 32, fontWeight: '700' },
-  dateLabel: { fontSize: 13, marginTop: 2 },
+  dateNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 4,
+  },
+  dateNavBtn: { padding: 8 },
+  dateNavLabel: { fontSize: 15, fontWeight: '600' },
   logBtn: {
     flexDirection: 'row',
     alignItems: 'center',

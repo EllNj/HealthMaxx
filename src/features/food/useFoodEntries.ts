@@ -33,29 +33,32 @@ export type DayTotals = {
   sodium_mg: number;
 };
 
-function localDateString(date = new Date()): string {
+export function localDateString(date = new Date()): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
-export function useTodayEntries(userId: string | undefined) {
-  const today = localDateString();
+export function useEntriesForDate(userId: string | undefined, dateStr: string) {
   return useQuery({
-    queryKey: ['food_entries', userId, today],
+    queryKey: ['food_entries', userId, dateStr],
     enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('food_entries')
         .select('*')
         .eq('user_id', userId!)
-        .eq('logged_for_date', today)
+        .eq('logged_for_date', dateStr)
         .order('created_at', { ascending: true });
       if (error) throw error;
       return (data ?? []) as FoodEntry[];
     },
   });
+}
+
+export function useTodayEntries(userId: string | undefined) {
+  return useEntriesForDate(userId, localDateString());
 }
 
 export function useLogFood() {
@@ -93,8 +96,7 @@ export function useLogFood() {
       return data as FoodEntry;
     },
     onSuccess: (_d, v) => {
-      const today = localDateString();
-      qc.invalidateQueries({ queryKey: ['food_entries', v.userId, today] });
+      qc.invalidateQueries({ queryKey: ['food_entries', v.userId] });
       qc.invalidateQueries({ queryKey: ['weekly_nutrition', v.userId] });
     },
   });
@@ -108,8 +110,7 @@ export function useDeleteFoodEntry() {
       if (error) throw error;
     },
     onSuccess: (_d, v) => {
-      const today = localDateString();
-      qc.invalidateQueries({ queryKey: ['food_entries', v.userId, today] });
+      qc.invalidateQueries({ queryKey: ['food_entries', v.userId] });
       qc.invalidateQueries({ queryKey: ['weekly_nutrition', v.userId] });
     },
   });
